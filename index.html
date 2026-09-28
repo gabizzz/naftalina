@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Precios de Combustible - Geolocalización</title>
+    <title>Precios de Combustible - Geocercanía</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <!-- Leaflet CSS -->
@@ -23,9 +23,18 @@
                 <i class="fa-solid fa-gas-pump text-emerald-400 text-2xl"></i>
                 <h1 class="text-xl font-bold tracking-wide">Naftas <span id="cityNameHeader" class="text-emerald-400 uppercase">Detectando...</span></h1>
             </div>
-            <button onclick="detectarUbicacionYCargar()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-xs transition flex items-center gap-2 cursor-pointer shadow">
-                <i class="fa-solid fa-crosshairs"></i> Actualizar GPS
-            </button>
+            <div class="flex items-center gap-2">
+                <select id="manualCity" onchange="cambiarCiudadManual(this.value)" class="bg-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 border border-slate-600 focus:outline-none">
+                    <option value="" disabled selected>Forzar ciudad...</option>
+                    <option value="SAN PEDRO">San Pedro</option>
+                    <option value="ZARATE">Zárate</option>
+                    <option value="CAMPANA">Campana</option>
+                    <option value="PILAR">Pilar</option>
+                </select>
+                <button onclick="detectarUbicacionYCargar()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-3 py-1.5 rounded-lg text-xs transition flex items-center gap-1 cursor-pointer shadow">
+                    <i class="fa-solid fa-crosshairs"></i> GPS
+                </button>
+            </div>
         </div>
     </header>
 
@@ -35,7 +44,7 @@
         <!-- Estado / Alertas -->
         <div id="status" class="bg-slate-800 border border-slate-700 p-4 rounded-xl text-sm flex items-center gap-3 text-slate-300">
             <i class="fa-solid fa-spinner fa-spin text-emerald-400 text-lg"></i>
-            <span>Obteniendo tu ubicación y consultando precios...</span>
+            <span>Obteniendo ubicación y consultando precios...</span>
         </div>
 
         <!-- Mapa -->
@@ -56,7 +65,7 @@
 
     <!-- Footer -->
     <footer class="bg-slate-800 border-t border-slate-700 py-4 text-center text-xs text-slate-400">
-        Datos de <a href="https://www.naftas.com.ar" target="_blank" class="text-emerald-400 hover:underline">naftas.com.ar</a> • Listo para GitHub Pages
+        Datos de <a href="https://www.naftas.com.ar" target="_blank" class="text-emerald-400 hover:underline">naftas.com.ar</a> • GitHub Pages Ready
     </footer>
 
     <!-- Leaflet JS -->
@@ -65,7 +74,7 @@
         let map;
         let userMarker = null;
 
-        function initMap(lat = -34.096, lng = -59.022) {
+        function initMap(lat = -33.681, lng = -59.667) {
             if (!map) {
                 map = L.map('map').setView([lat, lng], 13);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -99,28 +108,19 @@
                         userMarker = L.marker([lat, lng]).addTo(map).bindPopup("<b>Estás aquí</b>");
                         map.setView([lat, lng], 13);
 
-                        // Obtener nombre de la ciudad mediante geocodificación inversa
                         const cityName = await obtenerCiudadPorCoordenadas(lat, lng);
                         document.getElementById('cityNameHeader').innerText = cityName;
-                        
                         fetchPreciosCiudad(cityName);
                     },
                     (error) => {
-                        console.warn("GPS denegado o falló. Usando Zárate por defecto.");
-                        fallbackCiudad("ZARATE", "No se pudo acceder al GPS. Mostrando Zárate.");
+                        console.warn("GPS denegado. Usando San Pedro por defecto.");
+                        fetchPreciosCiudad("SAN PEDRO");
                     },
                     { timeout: 10000, maximumAge: 60000 }
                 );
             } else {
-                fallbackCiudad("ZARATE", "Geolocalización no soportada por el navegador.");
+                fetchPreciosCiudad("SAN PEDRO");
             }
-        }
-
-        function fallbackCiudad(ciudad, mensaje) {
-            document.getElementById('cityNameHeader').innerText = ciudad;
-            initMap(-34.096, -59.022);
-            actualizarEstado(mensaje, "error", false);
-            fetchPreciosCiudad(ciudad);
         }
 
         async function obtenerCiudadPorCoordenadas(lat, lng) {
@@ -130,19 +130,26 @@
                 });
                 const data = await response.json();
                 const address = data.address || {};
-                const ciudad = address.city || address.town || address.village || address.municipality || "ZARATE";
-                // Limpiar tildes y pasar a mayúsculas para que coincida con los parámetros de la API
+                const ciudad = address.city || address.town || address.village || address.municipality || "SAN PEDRO";
                 return ciudad.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
             } catch (e) {
-                return "ZARATE";
+                return "SAN PEDRO";
             }
+        }
+
+        function cambiarCiudadManual(ciudad) {
+            document.getElementById('cityNameHeader').innerText = ciudad;
+            fetchPreciosCiudad(ciudad);
         }
 
         async function fetchPreciosCiudad(city) {
             actualizarEstado(`Consultando precios para ${city}...`, "info", true);
             try {
-                const url = `https://www.naftas.com.ar/api/fuel?city=${encodeURIComponent(city)}`;
-                const response = await fetch(url);
+                const targetUrl = `https://www.naftas.com.ar/api/fuel?city=${encodeURIComponent(city)}`;
+                // Usamos un proxy CORS abierto para evitar que el navegador bloquee la petición desde GitHub Pages
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+                
+                const response = await fetch(proxyUrl);
                 if (!response.ok) throw new Error("Error al conectar con la API");
                 
                 const data = await response.json();
@@ -157,19 +164,19 @@
             const listContainer = document.getElementById('stations-list');
             listContainer.innerHTML = '';
 
-            // Obtener dinámicamente la primera clave que devuelva el JSON (independiente de cómo la escriba Nominatim)
+            // Si la API devuelve un objeto plano con la ciudad como llave principal
             const llaves = Object.keys(data);
             if (llaves.length === 0) {
                 actualizarEstado(`No se encontraron registros para ${cityRequested}.`, "error", false);
                 return;
             }
 
-            const cityKey = llaves[0]; // Toma la ciudad que devolvió el servidor de naftas
+            const cityKey = llaves.includes(cityRequested) ? cityRequested : llaves[0];
             const infoCiudad = data[cityKey];
             document.getElementById('cityNameHeader').innerText = cityKey;
 
-            if (!infoCiudad || !infoCiudad.empresas || Object.keys(infoCiudad.empresas).length === 0) {
-                actualizarEstado(`La ciudad de ${cityKey} no devolvió empresas en la API.`, "error", false);
+            if (!infoCiudad || !infoCiudad.empresas) {
+                actualizarEstado(`Estructura de datos inválida para ${cityKey}.`, "error", false);
                 return;
             }
 
@@ -222,15 +229,5 @@
             detectarUbicacionYCargar();
         };
     </script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Título de la página</title>
-</head>
-<body>
-    
 </body>
 </html>
