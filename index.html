@@ -142,11 +142,13 @@
             fetchPreciosCiudad(ciudad);
         }
 
-        async function fetchPreciosCiudad(city) {
+                async function fetchPreciosCiudad(city) {
             actualizarEstado(`Consultando precios para ${city}...`, "info", true);
             try {
-                const targetUrl = `https://www.naftas.com.ar/api/fuel?city=${encodeURIComponent(city)}`;
-                // Usamos un proxy CORS abierto para evitar que el navegador bloquee la petición desde GitHub Pages
+                // Normalizamos a minúsculas y reemplazamos espacios por guiones (ej: "SAN PEDRO" -> "san-pedro")
+                const citySlug = city.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().replace(/\s+/g, '-');
+                
+                const targetUrl = `https://www.naftas.com.ar/api/fuel?city=${citySlug}`;
                 const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
                 
                 const response = await fetch(proxyUrl);
@@ -159,6 +161,7 @@
                 actualizarEstado(`Error al obtener los datos para ${city}.`, "error", false);
             }
         }
+
 
         function procesarDatosAPI(data, cityRequested) {
             const listContainer = document.getElementById('stations-list');
