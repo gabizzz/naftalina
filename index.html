@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Precios de Combustible - Geocercanía</title>
+    <title>Precios de Combustible - Geolocalización</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <!-- Leaflet CSS -->
@@ -11,7 +11,7 @@
     <!-- FontAwesome para íconos -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <style>
-        #map { height: 300px; width: 100%; border-radius: 0.75rem; }
+        #map { height: 250px; width: 100%; border-radius: 0.75rem; }
     </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
@@ -23,8 +23,8 @@
                 <i class="fa-solid fa-gas-pump text-emerald-400 text-2xl"></i>
                 <h1 class="text-xl font-bold tracking-wide">Naftas <span id="cityNameHeader" class="text-emerald-400 uppercase">Detectando...</span></h1>
             </div>
-            <button onclick="detectarUbicacionYCargar()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 cursor-pointer shadow">
-                <i class="fa-solid fa-rotate"></i> Actualizar Ubicación
+            <button onclick="detectarUbicacionYCargar()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-xs transition flex items-center gap-2 cursor-pointer shadow">
+                <i class="fa-solid fa-crosshairs"></i> Actualizar GPS
             </button>
         </div>
     </header>
@@ -35,7 +35,7 @@
         <!-- Estado / Alertas -->
         <div id="status" class="bg-slate-800 border border-slate-700 p-4 rounded-xl text-sm flex items-center gap-3 text-slate-300">
             <i class="fa-solid fa-spinner fa-spin text-emerald-400 text-lg"></i>
-            <span>Obteniendo geolocalización y ciudad actual...</span>
+            <span>Obteniendo tu ubicación y consultando precios...</span>
         </div>
 
         <!-- Mapa -->
@@ -56,7 +56,7 @@
 
     <!-- Footer -->
     <footer class="bg-slate-800 border-t border-slate-700 py-4 text-center text-xs text-slate-400">
-        Datos obtenidos de <a href="https://www.naftas.com.ar" target="_blank" class="text-emerald-400 hover:underline">naftas.com.ar</a> • Adaptado por Geo
+        Datos de <a href="https://www.naftas.com.ar" target="_blank" class="text-emerald-400 hover:underline">naftas.com.ar</a> • Listo para GitHub Pages
     </footer>
 
     <!-- Leaflet JS -->
@@ -64,15 +64,16 @@
     <script>
         let map;
         let userMarker = null;
-        let userCoords = null;
 
-        function initMap(lat = -34.09679, lng = -59.02268) {
+        function initMap(lat = -34.096, lng = -59.022) {
             if (!map) {
                 map = L.map('map').setView([lat, lng], 13);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     maxZoom: 19,
                     attribution: '© OpenStreetMap'
                 }).addTo(map);
+            } else {
+                map.setView([lat, lng], 13);
             }
         }
 
@@ -86,48 +87,40 @@
 
         async function detectarUbicacionYCargar() {
             initMap();
-            actualizarEstado("Obteniendo coordenadas GPS del dispositivo...", "info", true);
+            actualizarEstado("Leyendo GPS del dispositivo...", "info", true);
 
             if ("geolocation" in navigator) {
                 navigator.geolocation.getCurrentPosition(
                     async (position) => {
-                        userCoords = {
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude
-                        };
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
                         
-                        // Centrar mapa en usuario
                         if (userMarker) map.removeLayer(userMarker);
-                        userMarker = L.marker([userCoords.lat, userCoords.lng], {
-                            icon: L.divIcon({
-                                className: 'custom-user-pin',
-                                html: '<div style="background-color: #3b82f6; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>',
-                                iconSize: [14, 14]
-                            })
-                        }).addTo(map).bindPopup("<b>Estás aquí</b>");
-                        map.setView([userCoords.lat, userCoords.lng], 14);
+                        userMarker = L.marker([lat, lng]).addTo(map).bindPopup("<b>Estás aquí</b>");
+                        map.setView([lat, lng], 13);
 
-                        // Obtener nombre de la ciudad por geocodificación inversa
-                        const cityName = await obtenerCiudadPorCoordenadas(userCoords.lat, userCoords.lng);
+                        // Obtener nombre de la ciudad mediante geocodificación inversa
+                        const cityName = await obtenerCiudadPorCoordenadas(lat, lng);
                         document.getElementById('cityNameHeader').innerText = cityName;
-
-                        // Consultar API con la ciudad detectada
+                        
                         fetchPreciosCiudad(cityName);
                     },
                     (error) => {
-                        console.warn("GPS denegado o no disponible, usando ZARATE por defecto.");
-                        const ciudadDefault = "ZARATE";
-                        document.getElementById('cityNameHeader').innerText = ciudadDefault;
-                        userCoords = { lat: -34.09679, lng: -59.02268 };
-                        fetchPreciosCiudad(ciudadDefault);
+                        console.warn("GPS denegado o falló. Usando Zárate por defecto.");
+                        fallbackCiudad("ZARATE", "No se pudo acceder al GPS. Mostrando Zárate.");
                     },
                     { timeout: 10000, maximumAge: 60000 }
                 );
             } else {
-                const ciudadDefault = "ZARATE";
-                document.getElementById('cityNameHeader').innerText = ciudadDefault;
-                fetchPreciosCiudad(ciudadDefault);
+                fallbackCiudad("ZARATE", "Geolocalización no soportada por el navegador.");
             }
+        }
+
+        function fallbackCiudad(ciudad, mensaje) {
+            document.getElementById('cityNameHeader').innerText = ciudad;
+            initMap(-34.096, -59.022);
+            actualizarEstado(mensaje, "error", false);
+            fetchPreciosCiudad(ciudad);
         }
 
         async function obtenerCiudadPorCoordenadas(lat, lng) {
@@ -137,11 +130,10 @@
                 });
                 const data = await response.json();
                 const address = data.address || {};
-                // Intentar extraer ciudad, pueblo o municipio
                 const ciudad = address.city || address.town || address.village || address.municipality || "ZARATE";
-                return ciudad.toUpperCase();
+                // Limpiar tildes y pasar a mayúsculas para que coincida con los parámetros de la API
+                return ciudad.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
             } catch (e) {
-                console.error("Error obteniendo ciudad inversa:", e);
                 return "ZARATE";
             }
         }
@@ -151,25 +143,33 @@
             try {
                 const url = `https://www.naftas.com.ar/api/fuel?city=${encodeURIComponent(city)}`;
                 const response = await fetch(url);
-                if (!response.ok) throw new Error("No se pudo conectar a la API de la ciudad");
+                if (!response.ok) throw new Error("Error al conectar con la API");
                 
                 const data = await response.json();
                 procesarDatosAPI(data, city);
             } catch (error) {
                 console.error(error);
-                actualizarEstado(`No hay datos automáticos directos para ${city}. Mostrando respaldo.`, "error", false);
+                actualizarEstado(`Error al obtener los datos para ${city}.`, "error", false);
             }
         }
 
-        function procesarDatosAPI(data, cityKey) {
+        function procesarDatosAPI(data, cityRequested) {
             const listContainer = document.getElementById('stations-list');
             listContainer.innerHTML = '';
 
-            // Si la API devuelve la estructura basada en la ciudad detectada o un array general
-            let infoCiudad = data[cityKey] || data[Object.keys(data)[0]];
+            // Obtener dinámicamente la primera clave que devuelva el JSON (independiente de cómo la escriba Nominatim)
+            const llaves = Object.keys(data);
+            if (llaves.length === 0) {
+                actualizarEstado(`No se encontraron registros para ${cityRequested}.`, "error", false);
+                return;
+            }
 
-            if (!infoCiudad || !infoCiudad.empresas) {
-                actualizarEstado(`No se encontraron registros detallados para ${cityKey}.`, "error", false);
+            const cityKey = llaves[0]; // Toma la ciudad que devolvió el servidor de naftas
+            const infoCiudad = data[cityKey];
+            document.getElementById('cityNameHeader').innerText = cityKey;
+
+            if (!infoCiudad || !infoCiudad.empresas || Object.keys(infoCiudad.empresas).length === 0) {
+                actualizarEstado(`La ciudad de ${cityKey} no devolvió empresas en la API.`, "error", false);
                 return;
             }
 
@@ -222,5 +222,15 @@
             detectarUbicacionYCargar();
         };
     </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Título de la página</title>
+</head>
+<body>
+    
 </body>
 </html>
