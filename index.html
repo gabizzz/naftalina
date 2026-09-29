@@ -70,7 +70,8 @@ const API = "https://naftas.com.ar/api/fuel";
 // Idealmente reemplazá alguno por tu propio Cloudflare Worker.
 const PROXIES = [
   u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
-  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u)
+  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  u => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u)
 ];
 const DEFAULT_CITY = "SAN PEDRO";
 const TTL = 30 * 60 * 1000;
@@ -144,11 +145,15 @@ async function tryFetch(url){
   if (!j || typeof j !== "object" || j.error) throw new Error("Respuesta inválida");
   return j;
 }
+const errores = [];
 async function pedir(city){
   const url = API + "?city=" + encodeURIComponent(city);
-  const intentos = [url, ...PROXIES.map(p => p(url))];
+  const rutas = [["directo", url], ...PROXIES.map((p, i) => ["proxy " + (i + 1), p(url)])];
   let last;
-  for (const u of intentos) { try { return await tryFetch(u); } catch (e) { last = e; } }
+  for (const [nombre, u] of rutas) {
+    try { return await tryFetch(u); }
+    catch (e) { last = e; errores.push(city + " / " + nombre + ": " + e.message); }
+  }
   throw last;
 }
 function extraer(data, city){
@@ -169,11 +174,18 @@ async function cargar(city, opts = {}){
 
   setStatus("Consultando precios de " + city + "…");
   try {
-    let data = await pedir(city);
-    let info = extraer(data, city);
-    // Por si la API espera el nombre sin tilde (o con tilde) y no coincide.
-    if (!info && norm(city) !== city) { data = await pedir(norm(city)); info = extraer(data, city); }
+    let data = null, info = null, lastErr;
+    errores.length = 0;
+    // Se prueba sin tilde primero (como en la versión original) y después con tilde.
+    for (const v of new Set([norm(city), city])) {
+      try {
+        data = await pedir(v);
+        info = extraer(data, city);
+        if (info && info.empresas && Object.keys(info.empresas).length) break;
+      } catch (e) { lastErr = e; }
+    }
     if (id !== reqId) return;
+    if (!data) throw lastErr;
     if (!info || !info.empresas || !Object.keys(info.empresas).length) {
       const otras = Object.keys(data).filter(Boolean);
       setStatus("No hay precios registrados para " + city + "." + (otras.length ? " La API devolvió: " + otras.join(", ") + "." : " Probá con otra ciudad cercana."), "error");
@@ -185,7 +197,8 @@ async function cargar(city, opts = {}){
   } catch (e) {
     if (id !== reqId) return;
     if (c) { render(c.v, city, "No se pudo actualizar; mostrando datos guardados del " + new Date(c.t).toLocaleString("es-AR") + "."); return; }
-    setStatus("No se pudieron cargar los precios de " + city + ". Revisá tu conexión y reintentá.", "error");
+    console.error("Fallos al consultar " + city + ":\n" + errores.join("\n"));
+    setStatus("No se pudieron cargar los precios de " + city + ". Detalle: " + (errores.slice(-3).join(" | ") || "sin respuesta") + ".", "error");
     $("list").replaceChildren(); $("tabs").replaceChildren();
   }
 }
