@@ -1,238 +1,263 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Precios de Combustible - Geocercanía</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- FontAwesome para íconos -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <style>
-        #map { height: 250px; width: 100%; border-radius: 0.75rem; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Naftas cerca tuyo</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#0f172a;--panel:#1e293b;--line:#334155;--txt:#f1f5f9;--mut:#94a3b8;--acc:#34d399;--acc2:#059669;--warn:#fbbf24;--err:#fb7185}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100vh;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+header{background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:1000;padding:.75rem 1rem}
+.wrap{max-width:56rem;margin:0 auto}
+.bar{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;justify-content:space-between}
+h1{font-size:1.25rem;margin:0}h1 span{color:var(--acc)}
+.ctl{display:flex;gap:.5rem;flex-wrap:wrap}
+label.sr{position:absolute;left:-9999px}
+input,button{font:inherit;font-size:.85rem;border-radius:.5rem;border:1px solid var(--line);padding:.45rem .7rem;background:#334155;color:var(--txt)}
+button{cursor:pointer;background:var(--acc2);border-color:var(--acc2);font-weight:600}
+button:hover{background:#047857}
+button.ghost{background:#334155;border-color:var(--line)}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+main{max-width:56rem;margin:0 auto;padding:1rem;display:grid;gap:1rem}
+#status{background:var(--panel);border:1px solid var(--line);border-radius:.75rem;padding:.75rem 1rem;font-size:.9rem;color:var(--mut)}
+#status.error{color:var(--err);border-color:var(--err)}#status.warn{color:var(--warn);border-color:var(--warn)}#status.ok{color:var(--acc)}
+#map{height:220px;border-radius:.75rem;border:1px solid var(--line)}
+.tabs{display:flex;gap:.5rem;flex-wrap:wrap}
+.tabs button{background:var(--panel);border-color:var(--line);color:var(--mut)}
+.tabs button[aria-pressed=true]{background:var(--acc2);border-color:var(--acc2);color:#fff}
+.list{display:grid;gap:.5rem;margin:0;padding:0;list-style:none}
+.row{display:grid;grid-template-columns:1fr auto;gap:.25rem 1rem;background:var(--panel);border:1px solid var(--line);border-radius:.75rem;padding:.7rem 1rem;align-items:center}
+.row.best{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
+.co{font-weight:700}.sub{font-size:.78rem;color:var(--mut)}
+.pr{font-size:1.2rem;font-weight:800;color:var(--acc);text-align:right;font-variant-numeric:tabular-nums}
+.tag{font-size:.72rem;border-radius:.4rem;padding:.05rem .4rem;margin-left:.4rem;background:#334155;color:var(--txt);font-weight:600}
+.tag.best{background:var(--acc2)}.diff{font-size:.75rem;color:var(--mut);text-align:right}
+.near{color:var(--warn)}
+footer{text-align:center;color:var(--mut);font-size:.78rem;padding:1rem}
+footer a{color:var(--acc)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+<body>
+<header><div class="wrap bar">
+  <h1>Naftas en <span id="city">…</span></h1>
+  <form class="ctl" id="form" autocomplete="off">
+    <label class="sr" for="q">Ciudad</label>
+    <input id="q" list="cities" placeholder="Buscar ciudad" size="16">
+    <datalist id="cities"></datalist>
+    <button type="submit">Buscar</button>
+    <button type="button" class="ghost" id="gps">Usar mi ubicación</button>
+  </form>
+</div></header>
 
-    <!-- Header -->
-    <header class="bg-slate-800 border-b border-slate-700 shadow-md p-4 sticky top-0 z-50">
-        <div class="max-w-4xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
-            <div class="flex items-center gap-2">
-                <i class="fa-solid fa-gas-pump text-emerald-400 text-2xl"></i>
-                <h1 class="text-xl font-bold tracking-wide">Naftas <span id="cityNameHeader" class="text-emerald-400 uppercase">ZÁRATE</span></h1>
-            </div>
-            <div class="flex items-center gap-2">
-                <select id="manualCity" onchange="cambiarCiudadManual(this.value)" class="bg-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 border border-slate-600 focus:outline-none cursor-pointer">
-                    <option value="" disabled selected>Cambiar ciudad...</option>
-                    <option value="ZARATE">Zárate</option>
-                    <option value="SAN PEDRO">San Pedro</option>
-                    <option value="CAMPANA">Campana</option>
-                    <option value="PILAR">Pilar</option>
-                    <option value="CAPITAL FEDERAL">Capital Federal</option>
-                </select>
-                <button onclick="detectarUbicacionYCargar()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-3 py-1.5 rounded-lg text-xs transition flex items-center gap-1 cursor-pointer shadow">
-                    <i class="fa-solid fa-crosshairs"></i> GPS
-                </button>
-            </div>
-        </div>
-    </header>
+<main>
+  <div id="status" role="status" aria-live="polite">Cargando…</div>
+  <div id="map" aria-label="Mapa"></div>
+  <div class="tabs" id="tabs" role="group" aria-label="Tipo de combustible"></div>
+  <ul class="list" id="list"></ul>
+</main>
 
-    <!-- Main Container -->
-    <main class="max-w-4xl w-full mx-auto p-4 flex-grow flex flex-col gap-6">
-        
-        <!-- Estado / Alertas -->
-        <div id="status" class="bg-slate-800 border border-slate-700 p-4 rounded-xl text-sm flex items-center gap-3 text-slate-300">
-            <i class="fa-solid fa-spinner fa-spin text-emerald-400 text-lg"></i>
-            <span>Consultando precios...</span>
-        </div>
+<footer>Datos de <a href="https://www.naftas.com.ar/api-docs" target="_blank" rel="noopener">naftas.com.ar</a> (Ministerio de Energía). Se actualizan cada varias horas y pueden tener demora.</footer>
 
-        <!-- Mapa -->
-        <div class="bg-slate-800 p-2 rounded-2xl border border-slate-700 shadow-lg">
-            <div id="map"></div>
-        </div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+"use strict";
+/* ---------- Configuración ---------- */
+const API = "https://naftas.com.ar/api/fuel";
+// Se prueba directo primero; si el navegador lo bloquea por CORS, se usan estos en orden.
+// Idealmente reemplazá alguno por tu propio Cloudflare Worker.
+const PROXIES = [
+  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
+  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u)
+];
+const DEFAULT_CITY = "SAN PEDRO";
+const TTL = 30 * 60 * 1000;
 
-        <!-- Listado de Estaciones / Marcas -->
-        <section>
-            <h2 class="text-lg font-semibold mb-3 flex items-center gap-2 text-slate-200">
-                <i class="fa-solid fa-list-ul text-emerald-400"></i> Precios por Empresa
-            </h2>
-            <div id="stations-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <!-- Se inyecta dinámicamente -->
-            </div>
-        </section>
-    </main>
+// La API no ofrece listado de ciudades: esta lista sirve para el buscador y para elegir la más cercana por GPS.
+const CITIES = {
+"CAPITAL FEDERAL":[-34.6037,-58.3816],"LA PLATA":[-34.9215,-57.9545],"MAR DEL PLATA":[-38.0055,-57.5426],
+"BAHÍA BLANCA":[-38.7196,-62.2724],"CÓRDOBA":[-31.4201,-64.1888],"ROSARIO":[-32.9468,-60.6393],
+"SANTA FE":[-31.6333,-60.7],"PARANÁ":[-31.7319,-60.5238],"MENDOZA":[-32.8895,-68.8458],"SAN JUAN":[-31.5375,-68.5364],
+"SAN LUIS":[-33.295,-66.3356],"SAN MIGUEL DE TUCUMÁN":[-26.8083,-65.2176],"SALTA":[-24.7821,-65.4232],
+"SAN SALVADOR DE JUJUY":[-24.1858,-65.2995],"SANTIAGO DEL ESTERO":[-27.7951,-64.2615],"CORRIENTES":[-27.4692,-58.8306],
+"RESISTENCIA":[-27.4511,-58.9867],"POSADAS":[-27.3671,-55.8961],"FORMOSA":[-26.1775,-58.1781],"NEUQUÉN":[-38.9516,-68.0591],
+"VIEDMA":[-40.8135,-62.9967],"RÍO GALLEGOS":[-51.6226,-69.2181],"USHUAIA":[-54.8019,-68.303],"RAWSON":[-43.3002,-65.1023],
+"COMODORO RIVADAVIA":[-45.8641,-67.4966],"CATAMARCA":[-28.4696,-65.7795],"LA RIOJA":[-29.4131,-66.8558],
+"SANTA ROSA":[-36.6203,-64.2906],"RÍO CUARTO":[-33.1307,-64.3499],"VILLA MARÍA":[-32.4074,-63.2409],
+"SAN PEDRO":[-33.6784,-59.6641],"ZÁRATE":[-34.0981,-59.0286],"CAMPANA":[-34.1645,-58.9592],"PILAR":[-34.4587,-58.9142],
+"MERLO":[-34.6654,-58.7276],"MORÓN":[-34.6534,-58.6198],"QUILMES":[-34.7206,-58.2546],"LOMAS DE ZAMORA":[-34.7609,-58.4017],
+"SAN ISIDRO":[-34.4708,-58.5286],"TIGRE":[-34.4260,-58.5796],"SAN NICOLÁS":[-33.3345,-60.2211],"PERGAMINO":[-33.8895,-60.5736],
+"JUNÍN":[-34.5847,-60.9583],"OLAVARRÍA":[-36.8927,-60.3225],"TANDIL":[-37.3217,-59.1332],"LUJÁN":[-34.5703,-59.105],
+"SAN ANTONIO DE ARECO":[-34.2500,-59.4667],"BARADERO":[-33.8090,-59.5040],"RAMALLO":[-33.4870,-60.0060]
+};
 
-    <!-- Footer -->
-    <footer class="bg-slate-800 border-t border-slate-700 py-4 text-center text-xs text-slate-400">
-        Datos de <a href="https://www.naftas.com.ar" target="_blank" class="text-emerald-400 hover:underline">naftas.com.ar</a>
-    </footer>
+/* ---------- Utilidades ---------- */
+const $ = id => document.getElementById(id);
+const norm = s => String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+const money = new Intl.NumberFormat("es-AR", {style:"currency", currency:"ARS", maximumFractionDigits:0});
+const fmtDate = s => { const d = new Date(s); return isNaN(d) ? "" : d.toLocaleDateString("es-AR"); };
+function h(tag, cls, text){ const e = document.createElement(tag); if(cls) e.className = cls; if(text != null) e.textContent = text; return e; }
+function setStatus(msg, kind){ const s = $("status"); s.textContent = msg; s.className = kind || ""; }
+function km(a, b){
+  const r = x => x * Math.PI / 180, dLat = r(b[0]-a[0]), dLng = r(b[1]-a[1]);
+  const q = Math.sin(dLat/2)**2 + Math.cos(r(a[0]))*Math.cos(r(b[0]))*Math.sin(dLng/2)**2;
+  return 12742 * Math.asin(Math.sqrt(q));
+}
+function nearestCity(pos){
+  let best = null, bd = Infinity;
+  for (const [name, c] of Object.entries(CITIES)) { const d = km(pos, c); if (d < bd) { bd = d; best = name; } }
+  return {name: best, dist: bd};
+}
+const CATS = ["Súper", "Premium", "Diésel", "GNC"];
+function categoria(name){
+  const n = norm(name);
+  if (/GNC/.test(n)) return "GNC";
+  if (/DIESEL|GASOIL|EURO|D500|GAS OIL/.test(n)) return "Diésel";
+  if (/PREMIUM|INFINIA|V-?POWER|MAX|ULTRA|EVOLUX|XXI/.test(n)) return "Premium";
+  return "Súper";
+}
 
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script>
-        let map;
-        let userMarker = null;
+/* ---------- Mapa ---------- */
+let map, markers = [];
+function showMap(user, cityName){
+  if (typeof L === "undefined") { $("map").hidden = true; return; }
+  const c = CITIES[cityName], pts = [];
+  if (!map) {
+    map = L.map("map").setView(c || [-34.6, -58.4], 12);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:"© OpenStreetMap"}).addTo(map);
+  }
+  markers.forEach(m => map.removeLayer(m)); markers = [];
+  if (c) { markers.push(L.marker(c).addTo(map).bindPopup(cityName)); pts.push(c); }
+  if (user) { markers.push(L.circleMarker(user, {radius:8, color:"#34d399", fillOpacity:.8}).addTo(map).bindPopup("Estás acá")); pts.push(user); }
+  if (pts.length > 1) map.fitBounds(pts, {padding:[30,30], maxZoom:13});
+  else if (pts.length) map.setView(pts[0], 12);
+}
 
-        function initMap(lat = -34.096, lng = -59.022) {
-            if (!map) {
-                map = L.map('map').setView([lat, lng], 13);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/**{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '© OpenStreetMap'
-                }).addTo(map);
-            } else {
-                map.setView([lat, lng], 13);
-            }
-        }
+/* ---------- Datos ---------- */
+let reqId = 0;
+async function tryFetch(url){
+  const r = await fetch(url, {signal: AbortSignal.timeout(9000)});
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const j = await r.json();
+  if (!j || typeof j !== "object" || j.error) throw new Error("Respuesta inválida");
+  return j;
+}
+async function pedir(city){
+  const url = API + "?city=" + encodeURIComponent(city);
+  const intentos = [url, ...PROXIES.map(p => p(url))];
+  let last;
+  for (const u of intentos) { try { return await tryFetch(u); } catch (e) { last = e; } }
+  throw last;
+}
+function extraer(data, city){
+  const key = Object.keys(data).find(k => norm(k) === norm(city));
+  return key ? data[key] : null;
+}
+const readCache = k => { try { return JSON.parse(localStorage.getItem("naftas:" + k)); } catch { return null; } };
+const writeCache = (k, v) => { try { localStorage.setItem("naftas:" + k, JSON.stringify({t: Date.now(), v})); } catch {} };
 
-        function actualizarEstado(mensaje, tipo = 'info', spinner = true) {
-            const statusDiv = document.getElementById('status');
-            let iconClass = spinner ? 'fa-solid fa-spinner fa-spin text-emerald-400 text-lg' : 'fa-solid fa-circle-info text-emerald-400 text-lg';
-            if (tipo === 'error') iconClass = 'fa-solid fa-triangle-exclamation text-rose-400 text-lg';
-            if (tipo === 'success') iconClass = 'fa-solid fa-circle-check text-emerald-400 text-lg';
-            statusDiv.innerHTML = `<i class="${iconClass}"></i><span>${mensaje}</span>`;
-        }
+async function cargar(city, opts = {}){
+  const id = ++reqId, k = norm(city);
+  $("city").textContent = city;
+  try { localStorage.setItem("naftas:last", city); } catch {}
+  showMap(opts.user, city);
 
-        async function detectarUbicacionYCargar() {
-            initMap();
-            actualizarEstado("Leyendo GPS del dispositivo...", "info", true);
+  const c = readCache(k);
+  if (c && Date.now() - c.t < TTL) { render(c.v, city, opts.aviso); return; }
 
-            if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(
-                    async (position) => {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
-                        
-                        if (userMarker) map.removeLayer(userMarker);
-                        userMarker = L.marker([lat, lng]).addTo(map).bindPopup("<b>Estás aquí</b>");
-                        map.setView([lat, lng], 13);
+  setStatus("Consultando precios de " + city + "…");
+  try {
+    let data = await pedir(city);
+    let info = extraer(data, city);
+    // Por si la API espera el nombre sin tilde (o con tilde) y no coincide.
+    if (!info && norm(city) !== city) { data = await pedir(norm(city)); info = extraer(data, city); }
+    if (id !== reqId) return;
+    if (!info || !info.empresas || !Object.keys(info.empresas).length) {
+      const otras = Object.keys(data).filter(Boolean);
+      setStatus("No hay precios registrados para " + city + "." + (otras.length ? " La API devolvió: " + otras.join(", ") + "." : " Probá con otra ciudad cercana."), "error");
+      $("list").replaceChildren(); $("tabs").replaceChildren();
+      return;
+    }
+    writeCache(k, info);
+    render(info, city, opts.aviso);
+  } catch (e) {
+    if (id !== reqId) return;
+    if (c) { render(c.v, city, "No se pudo actualizar; mostrando datos guardados del " + new Date(c.t).toLocaleString("es-AR") + "."); return; }
+    setStatus("No se pudieron cargar los precios de " + city + ". Revisá tu conexión y reintentá.", "error");
+    $("list").replaceChildren(); $("tabs").replaceChildren();
+  }
+}
 
-                        const cityName = await obtenerCiudadPorCoordenadas(lat, lng);
-                        document.getElementById('cityNameHeaderinnerText') = cityName;
-                        fetchPreciosCiudad(cityName);
-                    },
-                    (error) => {
-                        console.warn("GPS denegado. Usando ZARATE por defecto.");
-                        fetchPreciosCiudad("ZARATE");
-                    },
-                    { timeout: 10000, maximumAge: 60000 }
-                );
-            } else {
-                fetchPreciosCiudad("ZARATE");
-            }
-        }
+/* ---------- Render ---------- */
+let current = null, cat = null;
+function render(info, city, aviso){
+  const items = [];
+  for (const [empresa, fuels] of Object.entries(info.empresas || {})) {
+    if (!fuels || typeof fuels !== "object") continue;
+    for (const [fuel, d] of Object.entries(fuels)) {
+      const precio = Number(d && d.precio);
+      if (!isFinite(precio) || precio <= 0) continue;
+      items.push({empresa, fuel, precio, fecha: d.fecha_vigencia, horario: d.horario, near: d.fromNearby, nearKm: d.fromNearbyDistanceKm, cat: categoria(fuel)});
+    }
+  }
+  current = items;
+  const disponibles = CATS.filter(c => items.some(i => i.cat === c));
+  if (!items.length) { setStatus("Sin precios válidos para " + city + ".", "error"); return; }
+  if (!cat || !disponibles.includes(cat)) cat = disponibles[0];
+  setStatus(aviso || "Precios de " + city + " actualizados.", aviso ? "warn" : "ok");
 
-        async function obtenerCiudadPorCoordenadas(lat, lng) {
-            try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`, {
-                    headers: { 'Accept-Language': 'es' }
-                });
-                const data = await response.json();
-                const address = data.address || {};
-                const ciudad = address.city || address.town || address.village || address.municipality || "ZARATE";
-                return ciudad.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
-            } catch (e) {
-                return "ZARATE";
-            }
-        }
+  const tabs = $("tabs"); tabs.replaceChildren();
+  disponibles.forEach(c => {
+    const b = h("button", "", c + " (" + items.filter(i => i.cat === c).length + ")");
+    b.type = "button"; b.setAttribute("aria-pressed", String(c === cat));
+    b.onclick = () => { cat = c; render(info, city, aviso); };
+    tabs.appendChild(b);
+  });
 
-        function cambiarCiudadManual(ciudad) {
-            document.getElementById('cityNameHeader').innerText = ciudad;
-            fetchPreciosCiudad(ciudad);
-        }
+  const rows = items.filter(i => i.cat === cat).sort((a, b) => a.precio - b.precio);
+  const min = rows[0].precio, list = $("list"); list.replaceChildren();
+  rows.forEach((r, idx) => {
+    const li = h("li", "row" + (idx === 0 ? " best" : ""));
+    const left = h("div"), name = h("div", "co", r.empresa);
+    if (idx === 0) name.appendChild(h("span", "tag best", "Más barata"));
+    if (r.horario) name.appendChild(h("span", "tag", r.horario === "noche" ? "Noche 22–06 h" : r.horario === "dia" ? "Día 06–22 h" : r.horario));
+    left.appendChild(name);
+    const sub = [r.fuel, r.fecha ? "vigente desde " + fmtDate(r.fecha) : ""].filter(Boolean).join(" · ");
+    left.appendChild(h("div", "sub", sub));
+    if (r.near) left.appendChild(h("div", "sub near", "Precio de estación cercana: " + r.near + (r.nearKm != null ? " (" + r.nearKm + " km)" : "")));
+    const right = h("div");
+    right.appendChild(h("div", "pr", money.format(r.precio)));
+    right.appendChild(h("div", "diff", idx === 0 ? "por litro" : "+" + money.format(r.precio - min)));
+    li.append(left, right); list.appendChild(li);
+  });
+}
 
-        async function fetchPreciosCiudad(city) {
-            actualizarEstado(`Consultando precios para ${city}...`, "info", true);
-            try {
-                const targetUrl = `https://www.naftas.com.ar/api/fuel?city=${encodeURIComponent(city)}`;
-                const response = await fetch(targetUrl);
-                
-                if (!response.ok) throw new Error("Error en la respuesta del servidor");
-                
-                const data = await response.json();
-                procesarDatosAPI(data, city);
-            } catch (error) {
-                console.error(error);
-                actualizarEstado(`No se pudieron cargar los datos para ${city}.`, "error", false);
-            }
-        }
+/* ---------- Ubicación e interfaz ---------- */
+function usarGPS(){
+  if (!("geolocation" in navigator)) { cargar(DEFAULT_CITY, {aviso: "Tu navegador no ofrece ubicación. Mostrando " + DEFAULT_CITY + "."}); return; }
+  setStatus("Buscando tu ubicación…");
+  navigator.geolocation.getCurrentPosition(pos => {
+    const u = [pos.coords.latitude, pos.coords.longitude], n = nearestCity(u);
+    const aviso = n.dist > 15 ? "Tu ciudad no está en la lista; mostrando la más cercana: " + n.name + " (a " + Math.round(n.dist) + " km)." : null;
+    cargar(n.name, {user: u, aviso});
+  }, () => {
+    cargar(DEFAULT_CITY, {aviso: "No pudimos obtener tu ubicación. Mostrando " + DEFAULT_CITY + "; buscá tu ciudad arriba."});
+  }, {timeout: 10000, maximumAge: 60000});
+}
 
-        function procesarDatosAPI(data, cityRequested) {
-            const listContainer = document.getElementById('stations-list');
-            listContainer.innerHTML = '';
+$("cities").replaceChildren(...Object.keys(CITIES).map(n => { const o = document.createElement("option"); o.value = n; return o; }));
+$("gps").onclick = usarGPS;
+$("form").onsubmit = e => {
+  e.preventDefault();
+  const v = $("q").value.trim(); if (!v) return;
+  const match = Object.keys(CITIES).find(k => norm(k) === norm(v));
+  cargar(match || v.toUpperCase());
+};
 
-            // Tomamos la primera clave que traiga el JSON (ej. "ZARATE", "SAN PEDRO", etc.)
-            const keys = Object.keys(data);
-            if (keys.length === 0) {
-                actualizarEstado(`No hay registros para ${cityRequested}.`, "error", false);
-                return;
-            }
-
-            const actualCityKey = keys[0];
-            const ciudadData = data[actualCityKey];
-            document.getElementById('cityNameHeader').innerText = actualCityKey;
-
-            if (!ciudadData || !ciudadData.empresas) {
-                actualizarEstado(`Estructura vacía para ${actualCityKey}.`, "error", false);
-                return;
-            }
-
-            // Actualizar coordenadas del mapa si vienen en el JSON
-            if (ciudadData.coordenadas && ciudadData.coordenadas.latitud) {
-                initMap(ciudadData.coordenadas.latitud, ciudadData.coordenadas.longitud);
-            }
-
-            const empresas = ciudadData.empresas;
-            let contador = 1;
-
-            // Recorrer cada empresa (AXION, PUMA, SHELL, YPF)
-            Object.keys(empresas).forEach(nombreEmpresa => {
-                const combustibles = empresas[nombreEmpresa];
-                
-                let combustiblesHTML = '';
-                Object.keys(combustibles).forEach(combustibleNombre => {
-                    const det = combustibles[combustibleNombre];
-                    combustiblesHTML += `
-                        <div class="bg-slate-700/50 p-2.5 rounded-lg flex justify-between items-center text-xs">
-                            <span class="text-slate-200 font-medium">${combustibleNombre}</span>
-                            <div class="text-right">
-                                <span class="text-emerald-400 font-bold text-sm block">$${det.precio}</span>
-                                ${det.fromNearby ? `<span class="text-[10px] text-amber-400" title="Cercano desde ${det.fromNearby}">📍 ${det.fromNearby} (${det.fromNearbyDistanceKm}km)</span>` : ''}
-                            </div>
-                        </div>
-                    `;
-                });
-
-                const card = document.createElement('div');
-                card.className = "bg-slate-800 border border-slate-700 rounded-xl p-4 shadow flex flex-col justify-between gap-3";
-                card.innerHTML = `
-                    <div>
-                        <div class="flex justify-between items-start">
-                            <span class="text-xs font-bold text-emerald-400 uppercase tracking-wider">#${contador++} • Estación</span>
-                            <span class="text-[10px] bg-slate-700 px-2 py-0.5 rounded text-slate-300">${ciudadData.horario || 'Estándar'}</span>
-                        </div>
-                        <h3 class="font-bold text-base text-white mt-1 flex items-center gap-2">
-                            <i class="fa-solid fa-gas-pump text-slate-400"></i> ${nombreEmpresa}
-                        </h3>
-                    </div>
-                    <div class="flex flex-col gap-1.5 mt-1">
-                        <div class="grid grid-cols-1 gap-1.5">
-                            ${combustiblesHTML}
-                        </div>
-                    </div>
-                `;
-                listContainer.appendChild(card);
-            });
-
-            actualizarEstado(`Datos cargados correctamente para ${actualCityKey}.`, "success", false);
-        }
-
-        window.onload = () => {
-            // Arranca consultando Zárate por defecto o cambia a GPS
-            detectarUbicacionYCargar();
-        };
-    </script>
+let ultima = null; try { ultima = localStorage.getItem("naftas:last"); } catch {}
+if (ultima) cargar(ultima); else usarGPS();
+</script>
 </body>
 </html>
