@@ -74,6 +74,8 @@ const PROXIES = [
   u => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u)
 ];
 const DEFAULT_CITY = "SAN PEDRO";
+// URL de tu Cloudflare Worker (ej: "https://naftas.tuusuario.workers.dev/"). Si se completa, se usa primero.
+const WORKER = "";
 const TTL = 30 * 60 * 1000;
 
 // La API no ofrece listado de ciudades: esta lista sirve para el buscador y para elegir la más cercana por GPS.
@@ -111,20 +113,21 @@ function nearestCity(pos){
   for (const [name, c] of Object.entries(CITIES)) { const d = km(pos, c); if (d < bd) { bd = d; best = name; } }
   return {name: best, dist: bd};
 }
-const CATS = ["Súper", "Premium", "Diésel", "GNC"];
+const CATS = ["Súper", "Premium", "Diésel", "Diésel premium", "GNC"];
 function categoria(name){
   const n = norm(name);
   if (/GNC/.test(n)) return "GNC";
-  if (/DIESEL|GASOIL|EURO|D500|GAS OIL/.test(n)) return "Diésel";
-  if (/PREMIUM|INFINIA|V-?POWER|MAX|ULTRA|EVOLUX|XXI/.test(n)) return "Premium";
+  if (/DIESEL|GASOIL|GAS OIL|EURO|D500/.test(n))
+    return /\b(INFINIA|V-?POWER|QUANTIUM|ION|ULTRA|MAX)\b/.test(n) ? "Diésel premium" : "Diésel";
+  if (/PREMIUM|INFINIA|V-?POWER|QUANTIUM|\bMAX\b|ULTRA|XXI/.test(n)) return "Premium";
   return "Súper";
 }
 
 /* ---------- Mapa ---------- */
 let map, markers = [];
-function showMap(user, cityName){
+function showMap(user, cityName, coord){
   if (typeof L === "undefined") { $("map").hidden = true; return; }
-  const c = CITIES[cityName], pts = [];
+  const c = coord || CITIES[cityName], pts = [];
   if (!map) {
     map = L.map("map").setView(c || [-34.6, -58.4], 12);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:"© OpenStreetMap"}).addTo(map);
@@ -137,7 +140,7 @@ function showMap(user, cityName){
 }
 
 /* ---------- Datos ---------- */
-let reqId = 0;
+let reqId = 0, lastUser = null;
 async function tryFetch(url){
   const r = await fetch(url, {signal: AbortSignal.timeout(9000)});
   if (!r.ok) throw new Error("HTTP " + r.status);
@@ -148,13 +151,13 @@ async function tryFetch(url){
 const errores = [];
 async function pedir(city){
   const url = API + "?city=" + encodeURIComponent(city);
-  const rutas = [["directo", url], ...PROXIES.map((p, i) => ["proxy " + (i + 1), p(url)])];
-  let last;
-  for (const [nombre, u] of rutas) {
-    try { return await tryFetch(u); }
-    catch (e) { last = e; errores.push(city + " / " + nombre + ": " + e.message); }
-  }
-  throw last;
+  const rutas = [];
+  if (WORKER) rutas.push(["worker", WORKER + "?city=" + encodeURIComponent(city)]);
+  rutas.push(["directo", url], ...PROXIES.map((p, i) => ["proxy " + (i + 1), p(url)]));
+  // En paralelo: gana la primera que responde bien.
+  return Promise.any(rutas.map(([nombre, u]) =>
+    tryFetch(u).catch(e => { errores.push(city + " / " + nombre + ": " + e.message); throw e; })
+  ));
 }
 function extraer(data, city){
   const key = Object.keys(data).find(k => norm(k) === norm(city));
@@ -198,7 +201,7 @@ async function cargar(city, opts = {}){
     if (id !== reqId) return;
     if (c) { render(c.v, city, "No se pudo actualizar; mostrando datos guardados del " + new Date(c.t).toLocaleString("es-AR") + "."); return; }
     console.error("Fallos al consultar " + city + ":\n" + errores.join("\n"));
-    setStatus("No se pudieron cargar los precios de " + city + ". Detalle: " + (errores.slice(-3).join(" | ") || "sin respuesta") + ".", "error");
+    setStatus("No se pudieron cargar los precios de " + city + ". Detalle: " + (errores.length ? [...new Set(errores)].join(" | ") : "sin respuesta") + ".", "error");
     $("list").replaceChildren(); $("tabs").replaceChildren();
   }
 }
