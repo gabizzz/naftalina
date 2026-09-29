@@ -26,8 +26,8 @@
             <div class="flex items-center gap-2">
                 <select id="manualCity" onchange="cambiarCiudadManual(this.value)" class="bg-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 border border-slate-600 focus:outline-none cursor-pointer">
                     <option value="" disabled selected>Cambiar ciudad...</option>
-                    <option value="SAN PEDRO">San Pedro</option>
                     <option value="ZARATE">Zárate</option>
+                    <option value="SAN PEDRO">San Pedro</option>
                     <option value="CAMPANA">Campana</option>
                     <option value="PILAR">Pilar</option>
                     <option value="CAPITAL FEDERAL">Capital Federal</option>
@@ -75,7 +75,7 @@
         let map;
         let userMarker = null;
 
-        function initMap(lat = -33.681, lng = -59.667) {
+        function initMap(lat = -34.096, lng = -59.022) {
             if (!map) {
                 map = L.map('map').setView([lat, lng], 13);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -114,27 +114,26 @@
                         fetchPreciosCiudad(cityName);
                     },
                     (error) => {
-                        console.warn("GPS denegado. Usando San Pedro por defecto.");
-                        fetchPreciosCiudad("SAN PEDRO");
+                        console.warn("GPS denegado. Usando Zárate por defecto.");
+                        fetchPreciosCiudad("ZARATE");
                     },
                     { timeout: 10000, maximumAge: 60000 }
                 );
             } else {
-                fetchPreciosCiudad("SAN PEDRO");
+                fetchPreciosCiudad("ZARATE");
             }
         }
 
         async function obtenerCiudadPorCoordenadas(lat, lng) {
             try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`, {
-                    headers: { 'Accept-Language': 'es' }
-                });
-                const data = await response.json();
+                const response = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`;
+                const res = await fetch(response, { headers: { 'Accept-Language': 'es' } });
+                const data = await res.json();
                 const address = data.address || {};
-                const ciudad = address.city || address.town || address.village || address.municipality || "SAN PEDRO";
+                const ciudad = address.city || address.town || address.village || address.municipality || "ZARATE";
                 return ciudad.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
             } catch (e) {
-                return "SAN PEDRO";
+                return "ZARATE";
             }
         }
 
@@ -146,17 +145,30 @@
         async function fetchPreciosCiudad(city) {
             actualizarEstado(`Consultando precios para ${city}...`, "info", true);
             try {
-                // Llamada directa limpia sin proxies externos
                 const targetUrl = `https://www.naftas.com.ar/api/fuel?city=${encodeURIComponent(city)}`;
                 
-                const response = await fetch(targetUrl);
-                if (!response.ok) throw new Error("Error al conectar con la API");
+                // Usamos un proxy liviano de respaldo en caso de que CORS bloquee directo desde GitHub Pages
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
                 
-                const data = await response.json();
+                const response = await fetch(proxyUrl);
+                if (!response.ok) throw new Error("Error de conexión");
+                
+                const wrapper = await response.json();
+                if (!wrapper.contents) throw new Error("Sin contenido");
+                
+                const data = JSON.parse(wrapper.contents);
                 procesarDatosAPI(data, city);
             } catch (error) {
-                console.error(error);
-                actualizarEstado(`Error de red o CORS al obtener datos para ${city}.`, "error", false);
+                console.warn("Fallo el proxy, intentando fetch directo por si cambió la política...", error);
+                try {
+                    // Intento directo por si se ejecuta local o el servidor abrió CORS
+                    const directRes = await fetch(`https://www.naftas.com.ar/api/fuel?city=${encodeURIComponent(city)}`);
+                    const directData = await directRes.json();
+                    procesarDatosAPI(directData, city);
+                } catch (errDirect) {
+                    console.error(errDirect);
+                    actualizarEstado(`No se pudieron cargar los datos para ${city}. Verificá tu conexión.`, "error", false);
+                }
             }
         }
 
@@ -170,13 +182,12 @@
                 return;
             }
 
-            // Buscar la clave que coincida o tomar la primera disponible
             const cityKey = llaves.includes(cityRequested) ? cityRequested : llaves[0];
             const infoCiudad = data[cityKey];
             document.getElementById('cityNameHeader').innerText = cityKey;
 
             if (!infoCiudad || !infoCiudad.empresas) {
-                actualizarEstado(`Estructura de datos vacía para ${cityKey}.`, "error", false);
+                actualizarEstado(`Estructura de datos inválida para ${cityKey}.`, "error", false);
                 return;
             }
 
